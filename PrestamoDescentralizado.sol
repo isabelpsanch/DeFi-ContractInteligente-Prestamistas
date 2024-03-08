@@ -1,7 +1,8 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 contract PrestamoDescentralizado {
-    address public socioPrincipal;
+    address public administrador;
 
     struct Prestamo {
         uint id;
@@ -30,8 +31,8 @@ contract PrestamoDescentralizado {
     event PrestamoReembolsado(uint indexed id);
     event GarantiaLiquidada(uint indexed id);
 
-    modifier soloSocioPrincipal() {
-        require(msg.sender == socioPrincipal, "Solo el socio principal puede ejecutar esta función");
+    modifier soloAdministrador() {
+        require(msg.sender == administrador, "Solo el administrador puede ejecutar esta funcion");
         _;
     }
 
@@ -46,10 +47,10 @@ contract PrestamoDescentralizado {
     }
 
     constructor() {
-        socioPrincipal = msg.sender;
+        administrador = msg.sender;
     }
 
-    function altaPrestamista(address _nuevoPrestamista) external soloSocioPrincipal {
+    function altaPrestamista(address _nuevoPrestamista) external soloAdministrador {
         empleadosPrestamista[_nuevoPrestamista] = true;
     }
 
@@ -63,7 +64,7 @@ contract PrestamoDescentralizado {
 
     function solicitarPrestamo(uint _monto, uint _plazo) external soloClienteRegistrado {
         uint tiempoSolicitud = block.timestamp;
-        uint tiempoLimite = tiempoSolicitud + _plazo * 1 days;
+        uint tiempoLimite = tiempoSolicitud + _plazo;
 
         Prestamo memory nuevoPrestamo = Prestamo({
             id: clientes[msg.sender].prestamoIds.length,
@@ -85,7 +86,7 @@ contract PrestamoDescentralizado {
 
     function aprobarPrestamo(address _cliente, uint _id) external soloEmpleadoPrestamista {
         Prestamo storage prestamo = clientes[_cliente].prestamos[_id];
-        require(!prestamo.aprobado, "El préstamo ya ha sido aprobado");
+        require(!prestamo.aprobado, "El prestamo ya ha sido aprobado");
 
         prestamo.aprobado = true;
 
@@ -94,9 +95,15 @@ contract PrestamoDescentralizado {
 
     function reembolsarPrestamo(uint _id) external soloClienteRegistrado {
         Prestamo storage prestamo = clientes[msg.sender].prestamos[_id];
-        require(prestamo.aprobado, "El préstamo no ha sido aprobado");
-        require(!prestamo.reembolsado, "El préstamo ya ha sido reembolsado");
+        require(prestamo.aprobado, "El prestamo no ha sido aprobado");
+        require(!prestamo.reembolsado, "El prestamo ya ha sido reembolsado");
         require(block.timestamp <= prestamo.tiempoLimite, "El plazo de reembolso ha expirado");
+
+        // Transferir garantía al administrador
+        uint garantiaTransferida = prestamo.monto;
+        require(clientes[msg.sender].saldoGarantia >= garantiaTransferida, "Saldo de garantia insuficiente");
+        clientes[msg.sender].saldoGarantia -= garantiaTransferida;
+        payable(administrador).transfer(garantiaTransferida);
 
         prestamo.reembolsado = true;
 
@@ -105,21 +112,19 @@ contract PrestamoDescentralizado {
 
     function liquidarGarantia(address _cliente, uint _id) external soloEmpleadoPrestamista {
         Prestamo storage prestamo = clientes[_cliente].prestamos[_id];
-        require(prestamo.aprobado, "El préstamo no ha sido aprobado");
-        require(!prestamo.liquidado, "La garantía del préstamo ya ha sido liquidada");
+        require(prestamo.aprobado, "El prestamo no ha sido aprobado");
+        require(!prestamo.liquidado, "La garantia del prestamo ya ha sido liquidada");
         require(block.timestamp > prestamo.tiempoLimite, "El plazo de reembolso no ha expirado");
+        require(!prestamo.reembolsado, "El prestamo no ha sido reembolsado");
 
+        // Transferir garantía al prestamista
+        uint garantiaTransferida = prestamo.monto;
+        require(clientes[_cliente].saldoGarantia >= garantiaTransferida, "Saldo de garantia insuficiente");
+        clientes[_cliente].saldoGarantia -= garantiaTransferida;
         prestamo.liquidado = true;
-        clientes[_cliente].saldoGarantia -= prestamo.monto;
 
         emit GarantiaLiquidada(_id);
     }
-
-    function obtenerPrestamosPorPrestatario(address _prestatario) external view returns (uint[] memory) {
-        return clientes[_prestatario].prestamoIds;
-    }
-
-    function obtenerDetalleDePrestamo(address _prestatario, uint _id) external view returns (Prestamo memory) {
-        return clientes[_prestatario].prestamos[_id];
-    }
 }
+
+//Comprobado en Remix.
