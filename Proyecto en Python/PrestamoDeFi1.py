@@ -39,5 +39,30 @@ def enviar_transaccion(w3, txn_dict, private_key):
         raise Exception(f"Error al enviar la transacción: {e}")
 # Funciones de interacción con el contrato
 # Función para dar de alta un prestamista por el socio principal
-#def alta_prestamista(nuevo_prestamista_address):
-    #try:
+def alta_prestamista(nuevo_prestamista_address):
+    try:
+                # Verificar si el socio principal está autorizado para realizar esta acción
+        if not contract.functions.empleadosPrestamista(socio_principal_address).call():
+            raise Exception("El socio principal no está autorizado para dar de alta prestamistas.")
+        
+        # Construir la transacción
+        txn_dict = contract.functions.altaPrestamista(nuevo_prestamista_address).buildTransaction({
+            'chainId': 1,  # Reemplaza con el ID de la red Ethereum
+            'gas': 2000000,  # Reemplaza con el límite de gas adecuado
+            'gasPrice': w3.toWei('50', 'gwei'),  # Reemplaza con el precio de gas adecuado
+            'nonce': w3.eth.getTransactionCount(socio_principal_address),
+        })
+        
+        # Enviar la transacción
+        txn_receipt = enviar_transaccion(w3, txn_dict, socio_principal_private_key)
+        
+        print("El prestamista ha sido dado de alta exitosamente por el socio principal.")
+        return txn_receipt
+    except Exception as e:
+        print(f"Error al dar de alta el prestamista: {e}")
+
+# Dirección del nuevo prestamista a dar de alta
+nuevo_prestamista_address = "0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2"  # Reemplaza con la dirección del nuevo prestamista
+
+# Llamar a la función para dar de alta el prestamista
+alta_prestamista(nuevo_prestamista_address)
